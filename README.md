@@ -52,8 +52,33 @@ python app_nicegui.py        # http://localhost:8080
 5. repo 에 실제 데이터가 없으므로 클라우드 앱은 `example_inventory.csv` 로 구동된다.
    실데이터는 앱 사이드바의 **수동 업로드**로 올려서 본다(공개 앱엔 실데이터 상주 금지).
 
-자동 수집(사방넷)을 클라우드에서 돌리려면 자격증명을 **Streamlit Secrets** 에 넣고
-`warehouse.fetch_from_sabang()` 를 연결해야 한다(추후).
+## 실시간 재고 연동 (사방넷 → 비공개 시트 → 앱)
+> 앱이 사방넷을 직접 긁지 않는다. **수집과 표시를 분리**한다.
+```
+[collector.py]  사방넷 풀필먼트 ──Playwright 로그인+엑셀 다운──▶ 정규화
+   │ (로컬/스케줄러, 30분~1h)        (sabang_auto 로그인 패턴 재사용)
+   ▼
+[비공개 Google Sheet]  ◀── 서비스계정 1개로 수집기 write / 앱 read
+   ▲
+[app_streamlit.py]  live.read_inventory() · 10분 캐시 · 🔄새로고침 · 마지막 갱신시각
+```
+
+**준비 절차**
+1. **서비스계정 생성**: GCP 콘솔 → 서비스계정 만들기 → JSON 키 다운로드 → Google Sheets API 사용 설정.
+2. **비공개 시트 생성** 후 서비스계정 이메일(`xxx@xxx.iam.gserviceaccount.com`)을 **편집자**로 공유.
+3. **앱(클라우드)**: Streamlit Cloud → App settings → Secrets 에 `secrets.toml.example` 형식으로 SA 키와 `[sheet] id/tab` 입력.
+4. **수집기(로컬)**: `secrets/service_account.json` 배치 + `.env`(.env.example 참고) 채우기.
+   ```bash
+   pip install -r requirements-collector.txt
+   playwright install chromium
+   python collector.py --discover   # 사방넷 재고 페이지/다운로드 버튼 셀렉터 확인
+   python collector.py              # 1회 수집·적재
+   ```
+5. **스케줄링**: Windows 작업 스케줄러로 `python collector.py` 를 30분~1시간 주기 등록
+   (Ecount/사방넷자동등록 봇과 동일 방식).
+
+**남은 구현 한 곳**: `collector.download_location_inventory()` — 사방넷 재고/로케이션
+조회 페이지 URL과 엑셀 내보내기 셀렉터가 확정되면 채운다(`--discover` 로 탐색).
 
 ## 데이터 넣는 법 (3가지)
 1. **샘플 데이터** — 시트에서 뽑은 sample_inventory.csv (기본).
