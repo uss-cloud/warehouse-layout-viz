@@ -1,0 +1,16 @@
+# 실제 영업 데이터 (사방넷 raw) - 절대 커밋 금지
+sample_inventory.csv
+*_real*.csv
+*_raw*.csv
+
+# python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# logs / temp
+*.log
+st_log.txt
+ng_log.txt
+.DS_Store
