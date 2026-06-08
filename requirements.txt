@@ -1,4 +1,4 @@
+# Streamlit Community Cloud 가 읽는 기본 의존성 (Streamlit 앱 전용)
+streamlit>=1.30
 pandas>=2.0
 openpyxl>=3.1
-streamlit>=1.30
-nicegui>=1.4

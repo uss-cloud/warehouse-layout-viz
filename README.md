@@ -28,16 +28,32 @@ A07-25-04
 > repo에는 합성 예시(`example_inventory.csv`)만 들어있고, 앱은 `sample_inventory.csv`가 있으면 그걸,
 > 없으면 예시 데이터를 자동 사용한다.
 
-## 실행
+## 실행 (로컬)
 ```bash
+# Streamlit (운영 1차)
 pip install -r requirements.txt
-
-# Streamlit
 streamlit run app_streamlit.py
 
-# NiceGUI
+# NiceGUI (창고 도면 개발용 - 추후 전환)
+pip install -r requirements-nicegui.txt
 python app_nicegui.py        # http://localhost:8080
 ```
+
+## 배포 (Streamlit Community Cloud)
+> 운영 전략: **Streamlit으로 먼저 운영 → NiceGUI로 창고 도면 개발 후 전환.**
+
+1. https://share.streamlit.io 접속 → GitHub 로그인(해당 repo 계정).
+2. **New app → Deploy a public app from GitHub**.
+3. 설정:
+   - Repository: `<계정>/warehouse-layout-viz`
+   - Branch: `main`
+   - Main file path: `app_streamlit.py`
+4. **Deploy** 클릭. (`requirements.txt`만 읽어 streamlit/pandas/openpyxl 설치 → nicegui 미설치)
+5. repo 에 실제 데이터가 없으므로 클라우드 앱은 `example_inventory.csv` 로 구동된다.
+   실데이터는 앱 사이드바의 **수동 업로드**로 올려서 본다(공개 앱엔 실데이터 상주 금지).
+
+자동 수집(사방넷)을 클라우드에서 돌리려면 자격증명을 **Streamlit Secrets** 에 넣고
+`warehouse.fetch_from_sabang()` 를 연결해야 한다(추후).
 
 ## 데이터 넣는 법 (3가지)
 1. **샘플 데이터** — 시트에서 뽑은 sample_inventory.csv (기본).

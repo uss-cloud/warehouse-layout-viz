@@ -1,0 +1,8 @@
+[theme]
+base = "light"
+primaryColor = "#08519c"
+font = "sans serif"
+
+[server]
+# 업로드 파일 크기 한도(MB) - 사방넷 재고 export 대비 여유
+maxUploadSize = 50

@@ -1,0 +1,5 @@
+# NiceGUI 버전 전용 의존성 (창고 도면 개발용)
+#   pip install -r requirements-nicegui.txt
+nicegui>=1.4
+pandas>=2.0
+openpyxl>=3.1
