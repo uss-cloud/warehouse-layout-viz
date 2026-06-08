@@ -31,24 +31,42 @@ def load_sample():
     return wh.load_dataframe(pd.read_csv(SAMPLE, encoding="utf-8-sig"))
 
 
+@st.cache_data(ttl=600, show_spinner="사방넷 최신 재고 불러오는 중…")
+def load_live():
+    """비공개 Google Sheet(수집기가 적재) 에서 최신 재고 읽기. 10분 캐시."""
+    import live
+    client = live.client_from_secrets()
+    sheet_id = st.secrets["sheet"]["id"]
+    tab = st.secrets["sheet"].get("tab", "재고")
+    raw = live.read_inventory(client, sheet_id, tab)
+    return wh.load_dataframe(raw), live.read_updated_at(client, sheet_id)
+
+
 with st.sidebar:
     st.header("데이터")
-    source = st.radio("원본 선택", ["샘플 데이터", "수동 업로드", "사방넷 자동 수집"])
+    source = st.radio("원본 선택", ["샘플 데이터", "실시간 (사방넷→시트)", "수동 업로드"])
     df = None
-    if source == "샘플 데이터":
+    if source == "실시간 (사방넷→시트)":
+        if st.button("🔄 새로고침 (즉시 최신화)"):
+            load_live.clear()
+        try:
+            df, updated_at = load_live()
+            st.caption(f"📡 마지막 갱신: {updated_at or '알 수 없음'}")
+        except Exception as e:
+            st.warning(
+                "실시간 소스가 아직 설정되지 않았습니다.\n\n"
+                "Streamlit Secrets 에 서비스계정(gcp_service_account)과 "
+                "sheet(id/tab) 를 넣고, 수집기(collector.py)가 시트에 적재해야 합니다.\n\n"
+                f"({type(e).__name__}: {str(e)[:120]})"
+            )
+    elif source == "샘플 데이터":
         df = load_sample()
-    elif source == "수동 업로드":
+    else:
         up = st.file_uploader("사방넷 재고 export (csv / xlsx)", type=["csv", "xlsx", "xls"])
         if up is not None:
             df = wh.read_uploaded(up.getvalue(), up.name)
         else:
             st.info("파일을 올리면 표시됩니다. (컬럼: 로케이션명/상품코드/출고상품명/유통기한/수량)")
-    else:
-        try:
-            df = wh.fetch_from_sabang()
-            df = wh.load_dataframe(df)
-        except NotImplementedError as e:
-            st.warning(str(e))
 
 if df is None or df.empty:
     st.stop()

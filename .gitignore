@@ -14,3 +14,9 @@ venv/
 st_log.txt
 ng_log.txt
 .DS_Store
+
+# secrets - 절대 커밋 금지
+.env
+secrets/
+.streamlit/secrets.toml
+downloads/

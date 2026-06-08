@@ -1,0 +1,9 @@
+# 수집기(collector.py) 전용 - 로컬/스케줄러에서 실행 (Streamlit Cloud엔 미설치)
+#   pip install -r requirements-collector.txt
+#   playwright install chromium
+playwright>=1.40
+gspread>=6.0
+google-auth>=2.28
+pandas>=2.0
+openpyxl>=3.1
+python-dotenv>=1.0
