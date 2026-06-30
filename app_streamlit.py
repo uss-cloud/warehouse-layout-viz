@@ -73,52 +73,168 @@ if df is None or df.empty:
 
 cells = wh.aggregate(df)
 
-# ---- 컨트롤 --------------------------------------------------------------
-with st.sidebar:
-    st.header("보기")
-    mode = st.radio("색상 기준", ["품목", "재고수량", "유통기한"], horizontal=False)
-    racks = sorted({c.rack for c in cells.values()})
-    sel_racks = st.multiselect("랙 필터", racks, default=racks)
-    cats = sorted({c.category for c in cells.values()})
-    sel_cats = st.multiselect("품목군 필터", cats, default=cats)
-    dday_max = st.slider("유통기한 D-day 이하만 강조(필터)", -30, 365, 365, step=10)
-    reverse_bays = st.checkbox("베이 좌우반전 (01번을 오른쪽에 = 시트 방향)", value=True)
+# ===========================================================================
+# 탭 구성: 창고 격자 / 품목별 조회 / 로케이션별 조회
+# ===========================================================================
+tab_grid, tab_item, tab_location = st.tabs(["🗺️ 창고 격자", "🔍 품목별 조회", "📍 로케이션별 조회"])
 
-# ---- 필터 적용 -----------------------------------------------------------
-filtered = {
-    loc: c for loc, c in cells.items()
-    if c.rack in sel_racks
-    and c.category in sel_cats
-    and (c.dday is None or c.dday <= dday_max if mode == "유통기한" else True)
-}
+# ---------------------------------------------------------------------------
+# 탭 1: 창고 격자 (기존 기능 그대로)
+# ---------------------------------------------------------------------------
+with tab_grid:
+    with st.sidebar:
+        st.header("보기")
+        mode = st.radio("색상 기준", ["품목", "재고수량", "유통기한"], horizontal=False)
+        racks = sorted({c.rack for c in cells.values()})
+        sel_racks = st.multiselect("랙 필터", racks, default=racks)
+        cats = sorted({c.category for c in cells.values()})
+        sel_cats = st.multiselect("품목군 필터", cats, default=cats)
+        dday_max = st.slider("유통기한 D-day 이하만 강조(필터)", -30, 365, 365, step=10)
+        reverse_bays = st.checkbox("베이 좌우반전 (01번을 오른쪽에 = 시트 방향)", value=True)
 
-# ---- 요약 지표 -----------------------------------------------------------
-total_qty = sum(c.total_qty for c in filtered.values())
-n_loc = len(filtered)
-soon = sum(1 for c in filtered.values() if c.dday is not None and c.dday <= 30)
-expired = sum(1 for c in filtered.values() if c.dday is not None and c.dday < 0)
-c1, c2, c3, c4 = st.columns(4)
-c1.metric("점유 로케이션", f"{n_loc:,}")
-c2.metric("총 재고", f"{total_qty:,}")
-c3.metric("유통기한 임박(≤30일)", f"{soon:,}")
-c4.metric("기한 경과", f"{expired:,}")
+    # ---- 필터 적용 -------------------------------------------------------
+    filtered = {
+        loc: c for loc, c in cells.items()
+        if c.rack in sel_racks
+        and c.category in sel_cats
+        and (c.dday is None or c.dday <= dday_max if mode == "유통기한" else True)
+    }
 
-# ---- 레이아웃 그리드 -----------------------------------------------------
-html = wh.render_all_html(filtered, mode, reverse_bays=reverse_bays)
-st.components.v1.html(
-    f"<div style='overflow-x:auto'>{html}</div>",
-    height=260 + 150 * len(sel_racks),
-    scrolling=True,
-)
+    # ---- 요약 지표 -------------------------------------------------------
+    total_qty = sum(c.total_qty for c in filtered.values())
+    n_loc = len(filtered)
+    soon = sum(1 for c in filtered.values() if c.dday is not None and c.dday <= 30)
+    expired = sum(1 for c in filtered.values() if c.dday is not None and c.dday < 0)
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("점유 로케이션", f"{n_loc:,}")
+    c2.metric("총 재고", f"{total_qty:,}")
+    c3.metric("유통기한 임박(≤30일)", f"{soon:,}")
+    c4.metric("기한 경과", f"{expired:,}")
 
-# ---- 상세 테이블 ---------------------------------------------------------
-with st.expander("📋 로트 상세 (선입선출/폐기 점검용)"):
-    rows = []
-    for c in filtered.values():
-        for l in c.lots:
-            rows.append(
-                {"로케이션": c.location, "랙": c.rack, "품목": l["name"],
-                 "유통기한": l["expiry"], "수량": l["qty"], "D-day": c.dday}
-            )
-    det = pd.DataFrame(rows).sort_values(["유통기한"], na_position="last")
-    st.dataframe(det, use_container_width=True, hide_index=True)
+    # ---- 레이아웃 그리드 -------------------------------------------------
+    html = wh.render_all_html(filtered, mode, reverse_bays=reverse_bays)
+    st.components.v1.html(
+        f"<div style='overflow-x:auto'>{html}</div>",
+        height=260 + 150 * len(sel_racks),
+        scrolling=True,
+    )
+
+    # ---- 상세 테이블 -----------------------------------------------------
+    with st.expander("📋 로트 상세 (선입선출/폐기 점검용)"):
+        rows = []
+        for c in filtered.values():
+            for l in c.lots:
+                rows.append(
+                    {"로케이션": c.location, "랙": c.rack, "품목": l["name"],
+                     "유통기한": l["expiry"], "수량": l["qty"], "D-day": c.dday}
+                )
+        det = pd.DataFrame(rows).sort_values(["유통기한"], na_position="last")
+        st.dataframe(det, use_container_width=True, hide_index=True)
+
+
+# ---------------------------------------------------------------------------
+# 탭 2: 품목별 조회
+#   - 상품명 검색 -> 그 품목이 있는 모든 로케이션/수량/유통기한을 표로 나열
+# ---------------------------------------------------------------------------
+with tab_item:
+    st.subheader("품목별 재고 조회")
+
+    item_names = sorted(df["name"].dropna().unique().tolist())
+    query = st.text_input("품목명 검색 (일부만 입력해도 검색됩니다)", "", key="item_query")
+
+    matched = [n for n in item_names if query.strip() in n] if query else item_names
+
+    if not matched:
+        st.warning("검색 결과가 없습니다.")
+    else:
+        selected_item = st.selectbox(f"품목 선택 ({len(matched)}건 검색됨)", matched, key="item_select")
+
+        if selected_item:
+            item_df = df[df["name"] == selected_item].copy()
+
+            if item_df.empty:
+                st.warning("해당 품목의 재고 데이터가 없습니다.")
+            else:
+                total_qty_item = int(item_df["qty"].sum())
+                loc_count = item_df["location"].nunique()
+                col1, col2 = st.columns(2)
+                col1.metric("총 재고", f"{total_qty_item:,}")
+                col2.metric("점유 로케이션 수", f"{loc_count}")
+
+                table_df = (
+                    item_df[["location", "qty", "expiry"]]
+                    .rename(columns={"location": "로케이션", "qty": "수량", "expiry": "유통기한"})
+                    .sort_values("수량", ascending=False)
+                    .reset_index(drop=True)
+                )
+
+                if "expiry_dt" in item_df.columns:
+                    today = pd.Timestamp.now().normalize()
+                    dday_series = (item_df["expiry_dt"] - today).dt.days
+                    table_df.insert(2, "D-day", dday_series.apply(
+                        lambda d: f"D{d:+d}" if pd.notna(d) else ""
+                    ).values)
+
+                st.dataframe(table_df, use_container_width=True, hide_index=True)
+
+
+# ---------------------------------------------------------------------------
+# 탭 3: 로케이션별 조회
+#   - 랙/베이/단 선택 -> 해당 위치만 확대해서 나열
+# ---------------------------------------------------------------------------
+with tab_location:
+    st.subheader("로케이션별 재고 조회")
+
+    all_racks = sorted({c.rack for c in cells.values()})
+
+    lcol1, lcol2, lcol3 = st.columns(3)
+    with lcol1:
+        loc_sel_racks = st.multiselect(
+            "랙 선택", all_racks,
+            default=all_racks[:1] if all_racks else [],
+            key="loc_racks",
+        )
+    with lcol2:
+        bay_options = sorted({
+            c.bay for c in cells.values()
+            if not loc_sel_racks or c.rack in loc_sel_racks
+        })
+        loc_sel_bays = st.multiselect("베이 선택 (비워두면 전체)", bay_options, key="loc_bays")
+    with lcol3:
+        tier_options = sorted({
+            c.tier for c in cells.values()
+            if not loc_sel_racks or c.rack in loc_sel_racks
+        })
+        loc_sel_tiers = st.multiselect("단 선택 (비워두면 전체)", tier_options, key="loc_tiers")
+
+    loc_filtered = {
+        loc: c for loc, c in cells.items()
+        if (not loc_sel_racks or c.rack in loc_sel_racks)
+        and (not loc_sel_bays or c.bay in loc_sel_bays)
+        and (not loc_sel_tiers or c.tier in loc_sel_tiers)
+    }
+
+    if not loc_filtered:
+        st.warning("선택한 조건에 해당하는 로케이션이 없습니다.")
+    else:
+        st.caption(f"선택된 로케이션 {len(loc_filtered)}개")
+
+        sorted_locs = sorted(loc_filtered.items(), key=lambda kv: kv[1].total_qty, reverse=True)
+
+        for loc, cell in sorted_locs:
+            with st.container(border=True):
+                h1, h2, h3 = st.columns([2, 1, 1])
+                h1.markdown(f"**{loc}**")
+                h2.markdown(f"총재고: **{cell.total_qty:,}**")
+                if cell.dday is not None:
+                    h3.markdown(f"최임박: **D{cell.dday:+d}**")
+                else:
+                    h3.markdown("유통기한 없음")
+
+                if cell.lots:
+                    lot_df = pd.DataFrame(cell.lots).rename(
+                        columns={"name": "품목", "code": "상품코드", "expiry": "유통기한", "qty": "수량"}
+                    )
+                    st.dataframe(lot_df, use_container_width=True, hide_index=True)
+                else:
+                    st.caption("로트 정보 없음")
