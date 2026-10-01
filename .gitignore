@@ -20,3 +20,4 @@ ng_log.txt
 secrets/
 .streamlit/secrets.toml
 downloads/
+.env
