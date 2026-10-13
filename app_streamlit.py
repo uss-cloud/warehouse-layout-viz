@@ -58,7 +58,7 @@ def load_live():
 
 with st.sidebar:
     st.header("데이터")
-    source = st.radio("원본 선택", ["샘플 데이터", "실시간 (사방넷→시트)", "수동 업로드"])
+    source = st.radio("원본 선택", ["샘플 데이터", "실시간 (사방넷→시트)", "수동 업로드"], index=1)
     df = None
     if source == "실시간 (사방넷→시트)":
         if st.button("🔄 새로고침 (즉시 최신화)"):

@@ -21,3 +21,4 @@ secrets/
 .streamlit/secrets.toml
 downloads/
 .env
+*_log.txt
