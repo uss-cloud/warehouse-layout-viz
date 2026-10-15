@@ -19,6 +19,15 @@ SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_URL")
 
 FROZEN_LAYOUT_SHEET_ID = "1pUr4YIJwWxMuHZznJmCQCfy5xmdsuAwXyg4vWzUTtMY"
 TOTAL_FROZEN_LOCATIONS = 600
+# 산정값에 더할 여유분 (고정값) — 숫자만 바꾸면 조정 가능
+BUFFER_FROZEN = 0
+BUFFER_AMBIENT = 20
+
+
+def add_buffer(cap: dict, used_key: str, buffer: int) -> dict:
+    cap[used_key] = cap[used_key] + buffer
+    cap["가용률(%)"] = round(cap[used_key] / cap["총케파"] * 100, 1)
+    return cap
 
 
 def get_client():
@@ -32,8 +41,10 @@ def calc_frozen_capacity(client) -> dict:
     ws = sh.worksheet("WMS재고")
     raw = pd.DataFrame(ws.get_all_records())
     df = wh.load_dataframe(raw)
-    frozen_df = df[~df["rack"].astype(str).str.upper().str.startswith("Z")]
-    used = frozen_df["location"].nunique()
+    frozen_df = df[df["location"].astype(str).str.upper().str.startswith("A")]
+    rack_used = frozen_df["location"].nunique()
+    extra = capacity.calc_frozen_extra_pallets()
+    used = rack_used + extra["비렉파렛트"]
     return {
         "사용로케이션": used,
         "총케파": TOTAL_FROZEN_LOCATIONS,
@@ -69,6 +80,10 @@ def run():
     client = get_client()
     frozen = calc_frozen_capacity(client)
     ambient = capacity.calc_ambient_capacity()
+
+    frozen = add_buffer(frozen, "사용로케이션", BUFFER_FROZEN)
+    ambient = add_buffer(ambient, "사용파렛트", BUFFER_AMBIENT)
+
     message = build_message(frozen, ambient)
     send_to_slack(message)
     print("전송 완료:\n", message)

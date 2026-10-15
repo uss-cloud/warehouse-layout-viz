@@ -9,7 +9,7 @@ import pandas as pd
 import streamlit as st
 
 import warehouse as wh
-from capacity import calc_ambient_capacity  # 상온 파렛트 케파 계산 모듈
+from capacity import calc_ambient_capacity, calc_frozen_extra_pallets
 
 _LOGO_PATH = os.path.join(os.path.dirname(__file__), "logo.png")
 with open(_LOGO_PATH, "rb") as _f:
@@ -137,17 +137,21 @@ def render_zone(zone_key: str, zone_df: pd.DataFrame, zone_cells: dict):
 
         # ---- 케파 게이지 ---------------------------------------------------
         if zone_key == "frozen":
-            used = len(zone_cells)  # 재고 있는(점유) 로케이션 수
-            if TOTAL_FROZEN_LOCATIONS:
-                pct = used / TOTAL_FROZEN_LOCATIONS
-                st.metric(
-                    "냉동 케파", f"{used:,} / {TOTAL_FROZEN_LOCATIONS:,} 로케이션",
-                    f"{pct:.1%} 사용",
-                )
-                st.progress(min(pct, 1.0))
-            else:
-                st.metric("냉동 점유 로케이션", f"{used:,}")
-                st.caption("전체 로케이션 수를 설정하면 사용률(%)까지 표시됩니다.")
+            rack_used = sum(
+                1 for c in zone_cells.values()
+                if str(c.location).upper().startswith("A")
+            )
+            extra = calc_frozen_extra_pallets()
+            used = rack_used + extra["비렉파렛트"]
+            pct = used / TOTAL_FROZEN_LOCATIONS
+            st.metric(
+                "냉동 케파", f"{used:,} / {TOTAL_FROZEN_LOCATIONS:,}",
+                f"{pct:.1%} 사용",
+            )
+            st.progress(min(pct, 1.0))
+            st.caption(f"렉 {rack_used:,} + 비렉(의왕 B2B·출고용) {extra['비렉파렛트']:,} 파렛트")
+            if extra["PLT입수_누락"]:
+                st.warning(f"PLT입수 없는 품목 {len(extra['PLT입수_누락'])}건: {', '.join(extra['PLT입수_누락'][:10])}")
         else:
             result = calc_ambient_capacity()
             pct = result["가용률(%)"] / 100
